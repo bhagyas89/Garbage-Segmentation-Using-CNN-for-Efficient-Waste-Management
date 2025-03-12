@@ -1,0 +1,130 @@
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import regularizers
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, classification_report
+
+# Define Dataset Path
+dataset_path = r"C:\Users\bhagy\OneDrive\Desktop\Garbage classification\Garbage classification"
+
+# Data Augmentation
+train_datagen = ImageDataGenerator(
+    rescale=1. / 255,
+    rotation_range=30,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest',
+    validation_split=0.2
+)
+
+# Load Training Data
+train_data = train_datagen.flow_from_directory(
+    dataset_path,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='training'
+)
+
+# Load Validation Data
+val_data = train_datagen.flow_from_directory(
+    dataset_path,
+    target_size=(128, 128),
+    batch_size=32,
+    class_mode='categorical',
+    subset='validation'
+)
+
+# Define CNN Model Using Functional API
+input_layer = Input(shape=(128, 128, 3))
+
+# First Convolution Block
+x = Conv2D(64, (3, 3), activation='relu', kernel_regularizer=regularizers.l2(0.0001))(input_layer)
+x = BatchNormalization()(x)
+x = MaxPooling2D(pool_size=(2, 2))(x)
+
+# Second Convolution Block
+x = Conv2D(128, (3, 3), activation='relu', kernel_regularizer=regularizers.l2(0.0001))(x)
+x = BatchNormalization()(x)
+x = MaxPooling2D(pool_size=(2, 2))(x)
+
+# Third Convolution Block
+x = Conv2D(256, (3, 3), activation='relu', kernel_regularizer=regularizers.l2(0.0001))(x)
+x = BatchNormalization()(x)
+x = MaxPooling2D(pool_size=(2, 2))(x)
+x = Dropout(0.3)(x)
+
+# Fourth Convolution Block
+x = Conv2D(512, (3, 3), activation='relu', kernel_regularizer=regularizers.l2(0.0001))(x)
+x = BatchNormalization()(x)
+x = MaxPooling2D(pool_size=(2, 2))(x)
+x = Dropout(0.4)(x)
+
+# Fully Connected Layers
+x = Flatten()(x)
+x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.0001))(x)
+x = BatchNormalization()(x)
+x = Dropout(0.4)(x)
+
+x = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.0001))(x)
+x = BatchNormalization()(x)
+x = Dropout(0.3)(x)
+
+# Output Layer
+output_layer = Dense(train_data.num_classes, activation='softmax')(x)
+
+# Build Model
+cnn_model = Model(inputs=input_layer, outputs=output_layer)
+
+# Compile Model
+cnn_model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# Train CNN Model
+history = cnn_model.fit(
+    train_data,
+    validation_data=val_data,
+    epochs=50,
+    callbacks=[
+        tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=8, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, min_lr=1e-6)
+    ],
+    verbose=1
+)
+
+# Save Model
+cnn_model.save('../model/garbage_classifier.h5')
+
+# Plot Training History
+def plot_training_history(history):
+    plt.figure(figsize=(12, 4))
+
+    # Accuracy Plot
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Train Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    # Loss Plot
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Train Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.show()
+
+plot_training_history(history)
